@@ -104,14 +104,26 @@ fn main() {
         } else {
             date = args.date.as_ref().unwrap().to_string();
         }
-        println!("{}", generate(date.as_ref(), seed).unwrap());
-        exit(0);
+        let result = generate(date.as_ref(), seed);
+        if result.is_err() {
+            println!("{}", result.unwrap_err());
+            exit(1);
+        } else {
+            println!("{}", result.unwrap());
+            exit(0);
+        }
     } else {
         let range = args.range.unwrap();
         let begin = &range[0];
         let end = &range[1];
-        println!("{:?}", generate_multiple(&begin, &end, seed).unwrap());
-        exit(0);
+        let result = generate_multiple(&begin, &end, seed);
+        if result.is_err() {
+            println!("{}", result.unwrap_err());
+            exit(1);
+        } else {
+            println!("{:?}", result.unwrap());
+            exit(0);
+        }
     }
 
     // TODO:
