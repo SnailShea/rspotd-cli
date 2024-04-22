@@ -4,7 +4,11 @@ use chrono::Local;
 use clap::builder::PossibleValuesParser;
 use clap::Parser;
 use rspotd::{generate, generate_multiple, seed_to_des};
-use std::process::exit;
+use serde_json::to_string_pretty;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::{path::Path, process::exit};
+use std::writeln;
 
 /// Simple program to greet a person
 #[derive(Parser)]
@@ -69,7 +73,7 @@ struct Args {
         long = "verbose",
         help = "Print output to console even when writing to file"
     )]
-    verbose: Option<bool>,
+    verbose: bool,
 }
 
 fn current_date() -> String {
@@ -81,12 +85,24 @@ fn main() {
     let args = Args::parse();
     let format;
     let seed;
+    let output;
+    let path;
 
     // determine output format
     if args.format.is_none() {
         format = "text";
     } else {
         format = args.format.as_ref().unwrap();
+    }
+
+    // determine output file, if any
+    if args.output.is_none() {
+        path = Path::new(".").to_path_buf();
+        output = false;
+    } else {
+        let user_input = args.output.unwrap();
+        path = Path::new(".").join(user_input.to_string());
+        output = true;
     }
 
     // determine seed
@@ -109,7 +125,22 @@ fn main() {
             println!("{}", result.unwrap_err());
             exit(1);
         } else {
-            println!("{}", result.unwrap());
+            if output {
+                let mut file = OpenOptions::new()
+                    .create_new(true)
+                    .write(true)
+                    .append(false)
+                    .open(path)
+                    .unwrap();
+
+                let potd = format!("{}\n", result.as_ref().unwrap());
+                file.write_all(potd.as_bytes());
+                if args.verbose {
+                    println!("{}\n", result.unwrap());
+                    exit(0)
+                }
+            }
+            println!("{}", result.as_ref().unwrap());
             exit(0);
         }
     } else {
@@ -121,8 +152,38 @@ fn main() {
             println!("{}", result.unwrap_err());
             exit(1);
         } else {
-            println!("{:?}", result.unwrap());
-            exit(0);
+            if output {
+                let mut file = OpenOptions::new()
+                    .write(true)
+                    .append(false)
+                    .open(&path);
+                // file doesn't exist or bad permissions
+                if file.is_err() {
+                    file = OpenOptions::new()
+                        .write(true)
+                        .append(false)
+                        .create_new(true)
+                        .open(&path);
+                    // file cannot be created due to permissions
+                    if file.is_err() {
+                        println!("Unable to create file '{}' due to permissions.", path.display());
+                        exit(1);
+                    }
+                }
+                let mut writer = BufWriter::new(file.as_mut().unwrap());
+                let potd = serde_json::to_string_pretty(result.as_ref().unwrap());
+                if potd.is_err() {
+                    println!("{}", potd.as_ref().unwrap_err());
+                    exit(1)
+                } else {
+                    writer.write_all(potd.as_ref().unwrap().as_bytes());
+                    writer.write_all("\n".as_bytes());
+                    if args.verbose {
+                        println!("{}", potd.unwrap());
+                        exit(0);
+                    }
+                }
+            }
         }
     }
 
