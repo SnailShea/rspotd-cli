@@ -10,7 +10,6 @@ use std::io::{BufWriter, Write};
 use std::{path::Path, process::exit};
 use std::writeln;
 
-/// Simple program to greet a person
 #[derive(Parser)]
 #[clap(
     author = "Shea Zerda",
