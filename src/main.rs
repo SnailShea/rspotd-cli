@@ -1,12 +1,14 @@
 #![allow(warnings)]
 
 use chrono::Local;
-use clap::builder::PossibleValuesParser;
+use clap::builder::{PossibleValuesParser, Str};
 use clap::Parser;
 use rspotd::{generate, generate_multiple, seed_to_des};
 use serde_json::to_string_pretty;
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use std::{path::Path, process::exit};
 use std::writeln;
 
@@ -70,7 +72,7 @@ struct Args {
     #[arg(
         short = 'v',
         long = "verbose",
-        help = "Print output to console even when writing to file"
+        help = "Print output to console when writing to file"
     )]
     verbose: bool,
 }
@@ -79,29 +81,46 @@ fn current_date() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
+fn format_potd(format: &str, date: &str, potd: &str) -> String {
+    if format == "text" {
+        format!("{}: \t{}", date, potd)
+    } else {
+        let mut potd_vec: Vec<String> = Vec::new();
+        potd_vec.push(date.to_string());
+        potd_vec.push(potd.to_string());
+        serde_json::to_string_pretty(&potd_vec).unwrap()
+    }
+}
+
+fn format_potd_range(format: &str, potd_range: HashMap<String, String>) -> String {
+    if format == "text" {
+        // iterate
+        let formatted_range: String = potd_range.iter().map(|(x, y)| {
+            format!("{x}:\t{y}").to_string()
+        }).collect();
+        println!("{}", &formatted_range);
+        formatted_range
+    } else {
+        to_string_pretty(&potd_range).unwrap()
+    }
+}
+
 fn main() {
     use rspotd::vals::DEFAULT_SEED;
     let args = Args::parse();
-    let format;
+    let date;
+    let begin;
+    let end;
     let seed;
-    let output;
-    let path;
+    let format;
+    let mut potd: Option<String> = None;
+    let mut file;
 
     // determine output format
     if args.format.is_none() {
         format = "text";
     } else {
         format = args.format.as_ref().unwrap();
-    }
-
-    // determine output file, if any
-    if args.output.is_none() {
-        path = Path::new(".").to_path_buf();
-        output = false;
-    } else {
-        let user_input = args.output.unwrap();
-        path = Path::new(".").join(user_input.to_string());
-        output = true;
     }
 
     // determine seed
@@ -111,79 +130,74 @@ fn main() {
         seed = args.seed.as_ref().unwrap().as_str();
     }
 
-    // determine date or range
-    if args.range.is_none() {
-        let date: String;
-        if args.date.is_none() {
-            date = current_date();
+    // date not specified, range not specified, use today
+    if args.date.is_none() && args.range.is_none() {
+        date = current_date();
+        let result = generate(&date, seed);
+        if result.is_err() {
+            println!("{}", result.unwrap_err());
+            exit(1);            
         } else {
-            date = args.date.as_ref().unwrap().to_string();
+            potd = Some(result.as_ref().unwrap().to_string());
         }
+    } else if !args.date.is_none() {
+        date = args.date.as_ref().unwrap().to_string();
         let result = generate(date.as_ref(), seed);
         if result.is_err() {
             println!("{}", result.unwrap_err());
             exit(1);
         } else {
-            if output {
-                let mut file = OpenOptions::new()
-                    .create_new(true)
-                    .write(true)
-                    .append(false)
-                    .open(path)
-                    .unwrap();
-
-                let potd = format!("{}\n", result.as_ref().unwrap());
-                file.write_all(potd.as_bytes());
-                if args.verbose {
-                    println!("{}\n", result.unwrap());
-                    exit(0)
-                }
-            }
-            println!("{}", result.as_ref().unwrap());
-            exit(0);
+            potd = Some(result.as_ref().unwrap().to_string());
         }
-    } else {
-        let range = args.range.unwrap();
-        let begin = &range[0];
-        let end = &range[1];
-        let result = generate_multiple(&begin, &end, seed);
+    } else if !args.range.is_none() {
+        let range = args.range.as_ref().unwrap();
+        begin = &range[0];
+        end = &range[1];
+        let result = generate_multiple(begin, end, seed);
         if result.is_err() {
             println!("{}", result.unwrap_err());
-            exit(1);
+            exit(1);            
         } else {
-            if output {
-                let mut file = OpenOptions::new()
-                    .write(true)
-                    .append(false)
-                    .open(&path);
-                // file doesn't exist or bad permissions
-                if file.is_err() {
-                    file = OpenOptions::new()
-                        .write(true)
-                        .append(false)
-                        .create_new(true)
-                        .open(&path);
-                    // file cannot be created due to permissions
-                    if file.is_err() {
-                        println!("Unable to create file '{}' due to permissions.", path.display());
-                        exit(1);
-                    }
-                }
-                let mut writer = BufWriter::new(file.as_mut().unwrap());
-                let potd = serde_json::to_string_pretty(result.as_ref().unwrap());
-                if potd.is_err() {
-                    println!("{}", potd.as_ref().unwrap_err());
-                    exit(1)
-                } else {
-                    writer.write_all(potd.as_ref().unwrap().as_bytes());
-                    writer.write_all("\n".as_bytes());
-                    if args.verbose {
-                        println!("{}", potd.unwrap());
-                        exit(0);
-                    }
-                }
+            let _potd = serde_json::to_string_pretty(result.as_ref().unwrap());
+            if _potd.is_err() {
+                println!("{}", _potd.as_ref().unwrap_err());
+                exit(1)                
+            } else {
+                potd = Some(_potd.unwrap());
             }
         }
+    }
+
+    // determine output file, if any
+    if args.output.is_none() {
+        println!("{}", potd.unwrap());
+    } else {
+        if args.verbose {
+            println!("{}", potd.as_ref().unwrap());
+        }
+        let user_input = args.output.unwrap();
+        let path = Path::new(".").join(user_input.to_string());
+        file = OpenOptions::new()
+            .write(true)
+            .append(false)
+            .open(&path);
+        // file does not already exist, try to create it
+        if file.is_err() {
+            file = OpenOptions::new()
+                .write(true)
+                .append(false)
+                .create_new(true)
+                .open(&path);
+            // if this fails, most likely permission denied, nothing we can do
+            if file.is_err() {
+                println!("Unable to create file '{}', likely due to issue with permissions.", path.display());
+                exit(1);
+            }
+        }
+        let mut writer = BufWriter::new(file.as_mut().unwrap());
+        // use format here
+        writer.write_all(potd.unwrap().as_bytes());
+        writer.write_all("\n".as_bytes());
     }
 
     // TODO:
