@@ -85,23 +85,33 @@ fn format_potd(format: &str, date: &str, potd: &str) -> String {
     if format == "text" {
         format!("{}: \t{}", date, potd)
     } else {
-        let mut potd_vec: Vec<String> = Vec::new();
-        potd_vec.push(date.to_string());
-        potd_vec.push(potd.to_string());
-        serde_json::to_string_pretty(&potd_vec).unwrap()
+        let mut potd_map: HashMap<String, String> = HashMap::new();
+        potd_map.insert(date.to_string(), potd.to_string());
+        let json = serde_json::to_string_pretty(&potd_map);
+        if json.is_err() {
+            println!("{}", json.unwrap_err());
+            exit(1);
+        } else {
+            json.unwrap()
+        }
     }
 }
 
 fn format_potd_range(format: &str, potd_range: HashMap<String, String>) -> String {
     if format == "text" {
         // iterate
-        let formatted_range: String = potd_range.iter().map(|(x, y)| {
-            format!("{x}:\t{y}").to_string()
+        let range: String = potd_range.into_iter().map(|(x, y)| {
+            format!("{x}:\t{y}\n").to_string()
         }).collect();
-        println!("{}", &formatted_range);
-        formatted_range
+        range.to_string()
     } else {
-        to_string_pretty(&potd_range).unwrap()
+        let potd = to_string_pretty(&potd_range);
+        if potd.is_err() {
+            println!("{}", potd.unwrap_err());
+            exit(1);
+        } else {
+            potd.unwrap()
+        }
     }
 }
 
@@ -138,7 +148,7 @@ fn main() {
             println!("{}", result.unwrap_err());
             exit(1);            
         } else {
-            potd = Some(result.as_ref().unwrap().to_string());
+            potd = Some(format_potd(format, &date, result.as_ref().unwrap()));
         }
     } else if !args.date.is_none() {
         date = args.date.as_ref().unwrap().to_string();
@@ -147,7 +157,7 @@ fn main() {
             println!("{}", result.unwrap_err());
             exit(1);
         } else {
-            potd = Some(result.as_ref().unwrap().to_string());
+            potd = Some(format_potd(format, &date, result.as_ref().unwrap()));
         }
     } else if !args.range.is_none() {
         let range = args.range.as_ref().unwrap();
@@ -158,22 +168,17 @@ fn main() {
             println!("{}", result.unwrap_err());
             exit(1);            
         } else {
-            let _potd = serde_json::to_string_pretty(result.as_ref().unwrap());
-            if _potd.is_err() {
-                println!("{}", _potd.as_ref().unwrap_err());
-                exit(1)                
-            } else {
-                potd = Some(_potd.unwrap());
-            }
+            let _potd = format_potd_range(format, result.unwrap());
+            potd = Some(_potd);
         }
     }
 
     // determine output file, if any
     if args.output.is_none() {
-        println!("{}", potd.unwrap());
+        println!("{}", potd.as_ref().unwrap());
     } else {
         if args.verbose {
-            println!("{}", potd.as_ref().unwrap());
+            println!("{}", potd.as_mut().unwrap());
         }
         let user_input = args.output.unwrap();
         let path = Path::new(".").join(user_input.to_string());
@@ -196,8 +201,10 @@ fn main() {
         }
         let mut writer = BufWriter::new(file.as_mut().unwrap());
         // use format here
-        writer.write_all(potd.unwrap().as_bytes());
-        writer.write_all("\n".as_bytes());
+        if !potd.is_none() {
+            writer.write_all(potd.unwrap().as_bytes());
+            writer.write_all("\n".as_bytes());
+        }
     }
 
     // TODO:
