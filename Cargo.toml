@@ -2,6 +2,10 @@
 name = "rspotd-cli"
 version = "0.1.0"
 edition = "2021"
+description = "Generate ARRIS/Commscope password-of-the-day for modems using rspotd library"
+homepage = "https://github.com/SnailShea/rspotd-cli"
+license = "MIT OR Apache-2.0"
+keywords = ["arris", "commscope", "modem", "docsis", "potd"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
