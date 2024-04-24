@@ -12,7 +12,7 @@ keywords = ["arris", "commscope", "modem", "docsis", "potd"]
 [dependencies]
 chrono = "0.4.38"
 clap = { version = "4.5.4", features = ["derive", "string"] }
-rspotd = "^0.2.0"
+rspotd = "0.4.0"
 serde_json = "1.0.116"
 
 [profile.release]

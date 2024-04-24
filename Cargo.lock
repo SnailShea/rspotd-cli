@@ -348,9 +348,9 @@ checksum = "adad44e29e4c806119491a7f06f03de4d1af22c3a680dd47f1e6e179439d1f56"
 
 [[package]]
 name = "rspotd"
-version = "0.2.3"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "593876acbabab15fc9b77e07a0beaf55ce3f678b284d087f293343439d37c010"
+checksum = "06dbb46113864ac1a37b85ea19c165e024905a2a889fcfa70cdc60ed8c6723e0"
 dependencies = [
  "block-modes",
  "block-padding",

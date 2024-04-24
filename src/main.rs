@@ -11,7 +11,7 @@ use clap::{
 use rspotd::{generate, generate_multiple, seed_to_des};
 use serde_json::to_string_pretty;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     error::Error,
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
@@ -117,13 +117,14 @@ fn format_potd(format: &str, date: &str, potd: &str) -> String {
 fn format_potd_range(
     date_format: &str,
     format: &str,
-    potd_range: HashMap<String, String>,
+    potd_range: BTreeMap<String, String>,
 ) -> String {
     if format == "text" {
         let mut range: Vec<String> = Vec::new();
-        for day in potd_range.to_owned().into_iter() {
-            let date_val = format_date(date_format, &day.0);
-            let full_val = format!("{}:\t{}", date_val, &day.1);
+        for day in &potd_range {
+            let date_val = format_date(date_format, &potd_range[day.0]);
+            let potd_val = &potd_range[day.1];
+            let full_val = format!("{}:\t{}", date_val, potd_val);
             range.push(full_val);
         }
         range.join("\n")
@@ -156,9 +157,10 @@ fn unwrap_date_result(result: Result<String, Box<dyn Error>>) -> String {
         result.unwrap()
     }
 }
+
 fn unwrap_range_result(
-    result: Result<HashMap<String, String>, Box<dyn Error>>,
-) -> HashMap<String, String> {
+    result: Result<BTreeMap<String, String>, Box<dyn Error>>
+) -> BTreeMap<String, String> {
     if result.is_err() {
         println!("{}", result.unwrap_err());
         exit(1);
