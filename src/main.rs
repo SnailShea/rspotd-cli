@@ -12,6 +12,7 @@ use rspotd::{generate, generate_multiple, seed_to_des};
 use serde_json::to_string_pretty;
 use std::{
     collections::HashMap,
+    error::Error,
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
@@ -114,14 +115,14 @@ fn format_potd(format: &str, date: &str, potd: &str) -> String {
 }
 
 fn format_potd_range(
-    date_format: Option<String>,
+    date_format: &str,
     format: &str,
     potd_range: HashMap<String, String>,
 ) -> String {
     if format == "text" {
         let mut range: Vec<String> = Vec::new();
         for day in potd_range.to_owned().into_iter() {
-            let date_val = format_date(&date_format, &day.0).unwrap();
+            let date_val = format_date(date_format, &day.0);
             let full_val = format!("{}:\t{}", date_val, &day.1);
             range.push(full_val);
         }
@@ -137,26 +138,57 @@ fn format_potd_range(
     }
 }
 
-fn format_date(date_format: &Option<String>, date: &str) -> Option<String> {
-    if date_format.is_none() {
-        return Some(date.to_string());
-    }
+fn format_date(date_format: &str, date: &str) -> String {
     let naive_date: Result<NaiveDate, ParseError> = NaiveDate::from_str(date);
     if naive_date.is_err() {
-        return None;
+        println!("{:?}", naive_date.unwrap_err());
+        exit(1);
     }
-    let formatted_date: DelayedFormat<StrftimeItems<'_>> = NaiveDate::from_str(date)
-        .unwrap()
-        .format(date_format.as_ref().unwrap());
-    return Some(formatted_date.to_string());
+    let formatted_date = NaiveDate::from_str(date).unwrap().format(date_format);
+    return formatted_date.to_string();
 }
 
-fn unwrap_potd_result(result: &str) {}
+fn unwrap_date_result(result: Result<String, Box<dyn Error>>) -> String {
+    if result.is_err() {
+        println!("{}", result.unwrap_err());
+        exit(1);
+    } else {
+        result.unwrap()
+    }
+}
+fn unwrap_range_result(
+    result: Result<HashMap<String, String>, Box<dyn Error>>,
+) -> HashMap<String, String> {
+    if result.is_err() {
+        println!("{}", result.unwrap_err());
+        exit(1);
+    } else {
+        result.unwrap()
+    }
+}
+
+fn write_to_file(potd: &str, path: &Path) {
+    let mut file = OpenOptions::new()
+        .append(false)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&path);
+    if file.is_err() {
+        println!(
+            "Unable to create file '{}', likely due to issue with permissions.",
+            path.display()
+        );
+        exit(1);
+    }
+    let mut writer = BufWriter::new(file.as_mut().unwrap());
+    writer.write_all(potd.as_bytes());
+    writer.write_all("\n".as_bytes());
+}
 
 fn main() {
     use rspotd::vals::DEFAULT_SEED;
     let args = Args::parse();
-    let mut potd: Option<String> = None;
 
     // determine output format
     let format: String;
@@ -166,11 +198,11 @@ fn main() {
         format = args.format.unwrap();
     }
 
-    let date_format: Option<String>;
+    let date_format: String;
     if args.date_format.is_none() {
-        date_format = None;
+        date_format = String::from("%Y-%m-%d");
     } else {
-        date_format = Some(args.date_format.unwrap());
+        date_format = args.date_format.unwrap().to_string();
     }
 
     // determine seed
@@ -192,68 +224,47 @@ fn main() {
     }
 
     // determine whether date or range and set potd value
-    let date;
-    let begin;
-    let end;
+    let date_result;
+    let range_result;
     if args.date.is_none() && args.range.is_none() {
-        date = current_date();
-        let result = generate(&date, &seed);
-        if result.is_err() {
-            println!("{}", result.unwrap_err());
-            exit(1);
-        } else {
-            potd = Some(format_potd(&format, &date, &result.unwrap()));
-        }
+        let date = current_date();
+        date_result = unwrap_date_result(generate(&date, &seed));
+        range_result = String::from("");
     } else if !args.date.is_none() {
-        date = args.date.as_ref().unwrap().to_string();
-        let result = generate(&date, &seed);
-        if result.is_err() {
-            println!("{}", result.unwrap_err());
-            exit(1);
-        } else {
-            potd = Some(format_potd(&format, &date, &result.unwrap()));
-        }
+        let date = args.date.as_ref().unwrap().to_string();
+        date_result = unwrap_date_result(generate(&date, &seed));
+        range_result = String::from("");
     } else if !args.range.is_none() {
-        let range = args.range.as_ref().unwrap();
-        begin = &range[0];
-        end = &range[1];
-        let result = generate_multiple(begin, end, &seed);
-        if result.is_err() {
-            println!("{}", result.unwrap_err());
-            exit(1);
-        } else {
-            let _potd = format_potd_range(date_format, &format, result.unwrap());
-            potd = Some(_potd);
-        }
+        let range = args.range.unwrap();
+        let begin = &range[0];
+        let end = &range[1];
+        let _range_result = unwrap_range_result(generate_multiple(begin, end, &seed));
+        date_result = String::from("");
+        range_result = format_potd_range(&date_format, &format, _range_result);
+    } else {
+        // empty string initialization to keep the compiler happy
+        // and give us something to reference later for a potd value
+        date_result = String::from("");
+        range_result = String::from("");
+    }
+
+    // set potd value
+    let potd: String;
+    if date_result.len() > 1 {
+        potd = date_result;
+    } else {
+        potd = range_result;
     }
 
     // determine output file, if any
     if args.output.is_none() {
-        println!("{}", potd.as_ref().unwrap());
+        println!("{}", potd);
     } else {
         if args.verbose {
-            println!("{}", potd.as_mut().unwrap());
+            println!("{}", potd);
         }
         let user_input = args.output.unwrap();
         let path = Path::new(".").join(user_input.to_string());
-        let mut file = OpenOptions::new()
-            .append(false)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&path);
-        if file.is_err() {
-            println!(
-                "Unable to create file '{}', likely due to issue with permissions.",
-                path.display()
-            );
-            exit(1);
-        }
-        let mut writer = BufWriter::new(file.as_mut().unwrap());
-        // use format here
-        if !potd.is_none() {
-            writer.write_all(potd.unwrap().as_bytes());
-            writer.write_all("\n".as_bytes());
-        }
+        write_to_file(&potd, &path);
     }
 }
