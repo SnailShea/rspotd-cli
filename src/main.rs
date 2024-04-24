@@ -11,14 +11,7 @@ use clap::{
 use rspotd::{generate, generate_multiple, seed_to_des};
 use serde_json::to_string_pretty;
 use std::{
-    collections::{BTreeMap, HashMap},
-    error::Error,
-    fs::{File, OpenOptions},
-    io::{BufWriter, Write},
-    path::{Path, PathBuf},
-    process::exit,
-    str::FromStr,
-    writeln,
+    borrow::{Borrow, BorrowMut}, collections::{BTreeMap, HashMap}, error::Error, fs::{File, OpenOptions}, io::{BufWriter, Write}, path::{Path, PathBuf}, process::exit, str::FromStr, writeln
 };
 
 #[derive(Parser)]
@@ -119,17 +112,17 @@ fn format_potd_range(
     format: &str,
     potd_range: BTreeMap<String, String>,
 ) -> String {
+    let mut range: Vec<String> = Vec::new();
+    for day in &potd_range {
+        let date_val = format_date(date_format, &day.0);
+        let potd_val = &day.1;
+        let full_val = format!("{}: {}", date_val, &potd_val);
+        range.push(full_val);
+    }
     if format == "text" {
-        let mut range: Vec<String> = Vec::new();
-        for day in &potd_range {
-            let date_val = format_date(date_format, &day.0);
-            let potd_val = &day.1;
-            let full_val = format!("{}:\t{}", date_val, potd_val);
-            range.push(full_val);
-        }
         range.join("\n")
     } else {
-        let potd = to_string_pretty(&potd_range);
+        let potd = to_string_pretty(&range);
         if potd.is_err() {
             println!("{}", potd.unwrap_err());
             exit(1);
@@ -140,13 +133,11 @@ fn format_potd_range(
 }
 
 fn format_date(date_format: &str, date: &str) -> String {
-    let naive_date: Result<NaiveDate, ParseError> = NaiveDate::from_str(date);
-    if naive_date.is_err() {
-        println!("{:?}", naive_date.unwrap_err());
-        exit(1);
-    }
-    let formatted_date = NaiveDate::from_str(date).unwrap().format(date_format);
-    return formatted_date.to_string();
+    use std::fmt::Write;
+    let split: Vec<i32>= date.split("-").map(|part| part.parse::<i32>().unwrap()).collect();
+    let naive_date: NaiveDate = NaiveDate::from_ymd(split[0] as i32, split[1] as u32, split[2] as u32);
+    let formatted_date = naive_date.format(date_format).to_string();
+    return formatted_date;
 }
 
 fn unwrap_date_result(result: Result<String, Box<dyn Error>>) -> String {
@@ -231,12 +222,12 @@ fn main() {
         let date = current_date();
         let formatted_date = format_date(&date_format, &date);
         let date_result = unwrap_date_result(generate(&date, &seed));
-        potd = format_potd(&format, &date, &date_result);
+        potd = format_potd(&format, &formatted_date, &date_result);
     } else if !args.date.is_none() {
         let date = args.date.as_ref().unwrap().to_string();
         let formatted_date = format_date(&date_format, &date);
         let date_result = unwrap_date_result(generate(&date, &seed));
-        potd = format_potd(&format, &date, &date_result);
+        potd = format_potd(&format, &formatted_date, &date_result);
     } else if !args.range.is_none() {
         let range = args.range.unwrap();
         let begin = &range[0];
