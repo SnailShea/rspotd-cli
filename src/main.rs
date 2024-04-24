@@ -226,36 +226,27 @@ fn main() {
     }
 
     // determine whether date or range and set potd value
-    let date_result;
-    let range_result;
+    let potd;
     if args.date.is_none() && args.range.is_none() {
         let date = current_date();
-        date_result = unwrap_date_result(generate(&date, &seed));
-        range_result = String::from("");
+        let formatted_date = format_date(&date_format, &date);
+        let date_result = unwrap_date_result(generate(&date, &seed));
+        potd = format_potd(&format, &date, &date_result);
     } else if !args.date.is_none() {
         let date = args.date.as_ref().unwrap().to_string();
-        date_result = unwrap_date_result(generate(&date, &seed));
-        range_result = String::from("");
+        let formatted_date = format_date(&date_format, &date);
+        let date_result = unwrap_date_result(generate(&date, &seed));
+        potd = format_potd(&format, &date, &date_result);
     } else if !args.range.is_none() {
         let range = args.range.unwrap();
         let begin = &range[0];
         let end = &range[1];
         let _range_result = unwrap_range_result(generate_multiple(begin, end, &seed));
-        date_result = String::from("");
-        range_result = format_potd_range(&date_format, &format, _range_result);
+        potd = format_potd_range(&date_format, &format, _range_result);
     } else {
         // empty string initialization to keep the compiler happy
         // and give us something to reference later for a potd value
-        date_result = String::from("");
-        range_result = String::from("");
-    }
-
-    // set potd value
-    let potd: String;
-    if date_result.len() > 1 {
-        potd = date_result;
-    } else {
-        potd = range_result;
+        potd = String::from("");
     }
 
     // determine output file, if any
