@@ -122,8 +122,8 @@ fn format_potd_range(
     if format == "text" {
         let mut range: Vec<String> = Vec::new();
         for day in &potd_range {
-            let date_val = format_date(date_format, &potd_range[day.0]);
-            let potd_val = &potd_range[day.1];
+            let date_val = format_date(date_format, &day.0);
+            let potd_val = &day.1;
             let full_val = format!("{}:\t{}", date_val, potd_val);
             range.push(full_val);
         }
