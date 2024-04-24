@@ -1,17 +1,24 @@
 #![allow(warnings)]
 
-use chrono::{Local, NaiveDate};
-use clap::builder::{PossibleValuesParser, Str};
-use clap::Parser;
+use chrono::{
+    format::{DelayedFormat, StrftimeItems},
+    Local, NaiveDate, ParseError,
+};
+use clap::{
+    builder::{PossibleValuesParser, Str},
+    Parser,
+};
 use rspotd::{generate, generate_multiple, seed_to_des};
 use serde_json::to_string_pretty;
-use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{path::Path, process::exit};
-use std::writeln;
+use std::{
+    collections::HashMap,
+    fs::{File, OpenOptions},
+    io::{BufWriter, Write},
+    path::{Path, PathBuf},
+    process::exit,
+    str::FromStr,
+    writeln,
+};
 
 #[derive(Parser)]
 #[clap(
@@ -50,14 +57,14 @@ struct Args {
         short = 'f',
         long = "format",
         value_parser = PossibleValuesParser::new(["json", "text"]),
-        help="Password output format, either text or json"
+        help = "Password output format, either text or json"
     )]
     format: Option<String>,
 
     #[arg(
         short = 'F',
         long = "date-format",
-        help="Format the date string; see date(1) for valid format syntaxw"
+        help = "Format the date string; see date(1) for valid format syntax"
     )]
     date_format: Option<String>,
 
@@ -106,11 +113,15 @@ fn format_potd(format: &str, date: &str, potd: &str) -> String {
     }
 }
 
-fn format_potd_range(date_format: Option<&str>, format: &str, potd_range: HashMap<String, String>) -> String {
+fn format_potd_range(
+    date_format: Option<String>,
+    format: &str,
+    potd_range: HashMap<String, String>,
+) -> String {
     if format == "text" {
         let mut range: Vec<String> = Vec::new();
         for day in potd_range.to_owned().into_iter() {
-            let date_val = format_date(date_format.as_deref(), &day.0).unwrap();
+            let date_val = format_date(&date_format, &day.0).unwrap();
             let full_val = format!("{}:\t{}", date_val, &day.1);
             range.push(full_val);
         }
@@ -126,51 +137,52 @@ fn format_potd_range(date_format: Option<&str>, format: &str, potd_range: HashMa
     }
 }
 
-fn format_date(date_format: Option<&str>, date: &str) -> Option<String> {
+fn format_date(date_format: &Option<String>, date: &str) -> Option<String> {
     if date_format.is_none() {
         return Some(date.to_string());
     }
-    let naive_date = NaiveDate::from_str(date);
+    let naive_date: Result<NaiveDate, ParseError> = NaiveDate::from_str(date);
     if naive_date.is_err() {
         return None;
     }
-    let formatted_date = NaiveDate::from_str(date).unwrap().format(date_format.unwrap());
+    let formatted_date: DelayedFormat<StrftimeItems<'_>> = NaiveDate::from_str(date)
+        .unwrap()
+        .format(date_format.as_ref().unwrap());
     return Some(formatted_date.to_string());
 }
+
+fn unwrap_potd_result(result: &str) {}
 
 fn main() {
     use rspotd::vals::DEFAULT_SEED;
     let args = Args::parse();
-    let date;
-    let begin;
-    let end;
-    let seed;
-    let format;
-    let date_format: Option<&str>;
     let mut potd: Option<String> = None;
 
     // determine output format
+    let format: String;
     if args.format.is_none() {
-        format = "text";
+        format = String::from("text");
     } else {
-        format = args.format.as_ref().unwrap();
+        format = args.format.unwrap();
     }
 
+    let date_format: Option<String>;
     if args.date_format.is_none() {
         date_format = None;
     } else {
-        date_format = Some(args.date_format.as_ref().unwrap().as_str());
+        date_format = Some(args.date_format.unwrap());
     }
 
     // determine seed
+    let seed: String;
     if args.seed.is_none() {
-        seed = DEFAULT_SEED;
+        seed = DEFAULT_SEED.to_string();
     } else {
-        seed = args.seed.as_ref().unwrap().as_str();
+        seed = args.seed.unwrap();
     }
 
     if args.des {
-        let des = seed_to_des(seed);
+        let des = seed_to_des(&seed);
         if des.is_err() {
             println!("{}", des.unwrap_err());
             exit(1);
@@ -179,35 +191,38 @@ fn main() {
         exit(0)
     }
 
-    // date not specified, range not specified, use today
+    // determine whether date or range and set potd value
+    let date;
+    let begin;
+    let end;
     if args.date.is_none() && args.range.is_none() {
         date = current_date();
-        let result = generate(&date, seed);
-        if result.is_err() {
-            println!("{}", result.unwrap_err());
-            exit(1);            
-        } else {
-            potd = Some(format_potd(format, &date, result.as_ref().unwrap()));
-        }
-    } else if !args.date.is_none() {
-        date = args.date.as_ref().unwrap().to_string();
-        let result = generate(date.as_ref(), seed);
+        let result = generate(&date, &seed);
         if result.is_err() {
             println!("{}", result.unwrap_err());
             exit(1);
         } else {
-            potd = Some(format_potd(format, &date, result.as_ref().unwrap()));
+            potd = Some(format_potd(&format, &date, &result.unwrap()));
+        }
+    } else if !args.date.is_none() {
+        date = args.date.as_ref().unwrap().to_string();
+        let result = generate(&date, &seed);
+        if result.is_err() {
+            println!("{}", result.unwrap_err());
+            exit(1);
+        } else {
+            potd = Some(format_potd(&format, &date, &result.unwrap()));
         }
     } else if !args.range.is_none() {
         let range = args.range.as_ref().unwrap();
         begin = &range[0];
         end = &range[1];
-        let result = generate_multiple(begin, end, seed);
+        let result = generate_multiple(begin, end, &seed);
         if result.is_err() {
             println!("{}", result.unwrap_err());
-            exit(1);            
+            exit(1);
         } else {
-            let _potd = format_potd_range(date_format.as_deref(), format, result.unwrap());
+            let _potd = format_potd_range(date_format, &format, result.unwrap());
             potd = Some(_potd);
         }
     }
@@ -228,7 +243,10 @@ fn main() {
             .truncate(true)
             .open(&path);
         if file.is_err() {
-            println!("Unable to create file '{}', likely due to issue with permissions.", path.display());
+            println!(
+                "Unable to create file '{}', likely due to issue with permissions.",
+                path.display()
+            );
             exit(1);
         }
         let mut writer = BufWriter::new(file.as_mut().unwrap());
