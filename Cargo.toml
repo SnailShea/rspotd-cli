@@ -1,6 +1,6 @@
 [package]
 name = "rspotd-cli"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Generate ARRIS/Commscope password-of-the-day for modems using rspotd library"
 homepage = "https://github.com/SnailShea/rspotd-cli"
